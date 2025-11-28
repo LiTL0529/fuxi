@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JC rain NC 提取器</title>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-gradient: linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%);
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-gradient);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+        }
+        .container {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 480px;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .container:hover {
+            transform: translateY(-5px);
+        }
+        header h1 {
+            font-size: 1.875rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(to right, #4f46e5, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header p {
+            color: var(--text-sub);
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+        .upload-box {
+            border: 2px dashed #e5e7eb;
+            border-radius: 1rem;
+            padding: 2rem 1rem;
+            margin-bottom: 1.5rem;
+            transition: border-color 0.3s;
+            position: relative;
+            background: #f9fafb;
+        }
+        .upload-box:hover {
+            border-color: var(--primary-color);
+            background: #f3f4f6;
+        }
+        input[type="file"] {
+            width: 100%;
+            font-size: 0.9rem;
+            color: var(--text-sub);
+        }
+        input[type="file"]::file-selector-button {
+            margin-right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            border: none;
+            background: #e5e7eb;
+            color: #374151;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: 500;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background: #d1d5db;
+        }
+        button {
+            width: 100%;
+            padding: 0.875rem;
+            border: none;
+            border-radius: 0.75rem;
+            background: linear-gradient(to right, #4f46e5, #6366f1);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+        }
+        button:hover:not(:disabled) {
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+            transform: translateY(-1px);
+        }
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: #9ca3af;
+            box-shadow: none;
+        }
+        .status-card {
+            margin-top: 1.5rem;
+            text-align: left;
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            display: none; /* Hidden by default */
+            border: 1px solid #f3f4f6;
+        }
+        .status-card.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        .progress-track {
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #10b981, #34d399);
+            transition: width 0.4s ease;
+        }
+        #status-text {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            margin: 0;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>JC rain NC 提取器</h1>
+            <p>高效解析 wget 脚本，一键打包下载 NetCDF 数据</p>
+        </header>
+        
+        <form id="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+            <div class="upload-box">
+                <input type="file" id="script" name="script" accept=".sh" required />
+            </div>
+            <button type="submit" id="submit-btn">开始提取数据</button>
+        </form>
+
+        <div class="status-card" id="status-card">
+            <div class="progress-track">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <p id="status-text">准备就绪</p>
+        </div>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('upload-form');
+        const statusCard = document.getElementById('status-card');
+        const statusText = document.getElementById('status-text');
+        const progressBar = document.getElementById('progress-bar');
+        const submitBtn = document.getElementById('submit-btn');
+        let pollTimer = null;
+
+        uploadForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.textContent = '处理中...';
+            statusCard.classList.add('active');
+            statusText.textContent = '正在上传脚本...';
+            progressBar.style.width = '5%';
+            progressBar.style.background = 'linear-gradient(90deg, #10b981, #34d399)'; // Reset color
+
+            const formData = new FormData(uploadForm);
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.job_id) {
+                    throw new Error(payload.detail || '上传失败');
+                }
+                const { job_id } = payload;
+                statusText.textContent = '任务已创建，开始下载...';
+                startPolling(job_id);
+            } catch (error) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '开始提取数据';
+                statusText.innerHTML = `<span style="color: #ef4444;">错误：${error.message}</span>`;
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#ef4444';
+            }
+        });
+
+        function startPolling(jobId) {
+            clearInterval(pollTimer);
+            pollTimer = setInterval(async () => {
+                try {
+                    const response = await fetch(`/status/${jobId}`);
+                    if (!response.ok) {
+                        throw new Error('状态查询失败');
+                    }
+                    const info = await response.json();
+                    const percentage = info.total ? Math.round((info.completed / info.total) * 100) : 0;
+                    progressBar.style.width = `${percentage}%`;
+                    statusText.textContent = `状态：${info.status} | 已完成 ${info.completed}/${info.total}`;
+
+                    if (info.status === 'completed') {
+                        clearInterval(pollTimer);
+                        statusText.textContent = '打包完成，正在下载...';
+                        progressBar.style.width = '100%';
+                        setTimeout(() => {
+                            window.location.href = `/download/${jobId}`;
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = '开始提取数据';
+                        }, 500);
+                    } else if (info.status === 'failed') {
+                        clearInterval(pollTimer);
+                        statusText.innerHTML = `<span style="color: #ef4444;">任务失败：${info.message || 'Unknown error'}</span>`;
+                        progressBar.style.background = '#ef4444';
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '重试';
+                    }
+                } catch (error) {
+                    clearInterval(pollTimer);
+                    statusText.textContent = `状态更新失败：${error.message}`;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '重试';
+                }
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
